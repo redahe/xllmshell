@@ -111,21 +111,70 @@ class AIChat:
             "Enter a request or type [bright_magenta]/help[/bright_magenta] for commands\n")
 
     def print_help(self):
-        bm="bright_magenta"
+        cl="bright_magenta"
         self.console.print("\n[bold]Available Commands:[/bold]")
         self.console.print(
-            f"  [bm]/model <name>[/bm] - Change or show the current model")
+            f"  [{cl}]/settings[/{cl}]        - Show current settings")
         self.console.print(
-            f"  [bm]/clear[/bm]        - Clear conversation history")
+            f"  [{cl}]/model <name>[/{cl}]    - Change or show the current model")
         self.console.print(
-            f"  [bm]/edit[/bm]         - Open $EDITOR to enter input")
+            f"  [{cl}]/latex <on/off>[/{cl}]  - Enable/Disable converting LaTex formulas to unicode")
         self.console.print(
-            f"  [bm]/repeat[/bm]       - Repeat the response with no formatting")
+            f"  [{cl}]/scroll <on/off>[/{cl}] - Enable/Disable autoscrolling to the beginning of the AI response in tmux copy-mode")
         self.console.print(
-            f"  [bm]/exit[/bm]         - Exit the chat")
+            f"  [{cl}]/format <on/off>[/{cl}] - Enable/Disable formating (highlighting) the markdown in AI response")
         self.console.print(
-            f"  [bm]/help[/bm]         - Show this menu\n")
+            f"  [{cl}]/clear[/{cl}]           - Clear conversation history")
+        self.console.print(
+            f"  [{cl}]/edit[/{cl}]            - Open $EDITOR to enter input")
+        self.console.print(
+            f"  [{cl}]/repeat[/{cl}]          - Repeat the response with no formatting")
+        self.console.print(
+            f"  [{cl}]/exit[/{cl}]            - Exit the chat")
+        self.console.print(
+            f"  [{cl}]/help[/{cl}]            - Show this menu\n")
  
+
+    def parse_on_off(self, value):
+        return value.lower() in ["on", "true", "1", "yes", "y"]
+
+
+    def process_user_query(self, user_input):
+        self.console.print(REQUEST_MARKER_STYLED_TEXT, justify="right")
+        content = Text(user_input, style="default")
+        bubble = Panel(content, style="white", expand=False, padding=(0, 1))
+        self.console.print(Align.right(bubble))
+        self.console.print("")
+
+        self.messages.append({'role': 'user', 'content': user_input})
+        full_response = ""
+        with Live(console=self.console, refresh_per_second=10) as live:
+            for chunk in ollama.chat(
+                    model=self.model, messages=self.messages, stream=True):
+                content = chunk['message']['content']
+                full_response += content
+                live.update(self.last_lines_preview(full_response), refresh=True)
+
+            response_to_show = full_response
+            if (self.convert_latex):
+                response_to_show = self.process_latex(response_to_show)
+
+            if (self.format_response):
+                response_to_show = CustomMarkdown(response_to_show)
+            else:
+                response_to_show = Text(response_to_show)
+
+            display_group = Group(
+                    Text(RESPONSE_MARKER, style="bright_white on bright_blue"),
+                    response_to_show)
+            live.update(display_group)
+        self.messages.append({'role': 'assistant', 'content': full_response})
+        print() 
+        if (self.tmux_scroll):
+            subprocess.run(
+                    ["sh", "./scroll.sh", RESPONSE_MARKER], check=True)
+
+
 
     def run(self):
         self.print_info()
@@ -134,7 +183,6 @@ class AIChat:
                 user_input = input(PROMPT)
                 if not user_input:
                     continue
-                # --- Slash Command Handler ---
                 if user_input.startswith('/'):
                     cmd_parts = user_input.split()
                     cmd = cmd_parts[0].lower()
@@ -143,7 +191,22 @@ class AIChat:
                         break
                     elif cmd == '/edit':
                         with self.console.screen():
-                            user_input = get_input_from_editor()
+                            user_input = self.get_input_from_editor()
+                    elif cmd == '/latex':
+                        if len(cmd_parts) > 1:
+                            self.convert_latex = self.parse_on_off(cmd_parts[1])
+                        self.print_status_line()
+                        continue
+                    elif cmd == '/scroll':
+                        if len(cmd_parts) > 1:
+                            self.tmux_scroll = self.parse_on_off(cmd_parts[1])
+                        self.print_status_line()
+                        continue
+                    elif cmd == '/format':
+                        if len(cmd_parts) > 1:
+                            self.format_response = self.parse_on_off(cmd_parts[1])
+                        self.print_status_line()
+                        continue
                     elif cmd == '/clear':
                         self.messages = []
                         self.console.clear()
@@ -162,6 +225,9 @@ class AIChat:
                         else:
                             self.console.print(f"Current model: [bold cyan]{self.model}[/bold cyan]")
                         continue
+                    elif cmd == '/settings':
+                        self.print_status_line()
+                        continue
                     elif cmd == '/help':
                         self.print_help()
                         continue
@@ -169,33 +235,7 @@ class AIChat:
                     else:
                         self.console.print(f"[bold red]Unknown command:[/bold red] {cmd}")
                         continue
-                # -----------------------------
-
-                self.console.print(REQUEST_MARKER_STYLED_TEXT, justify="right")
-                content = Text(user_input, style="default")
-                bubble = Panel(content, style="white", expand=False, padding=(0, 1))
-                self.console.print(Align.right(bubble))
-                self.console.print("")
-
-                self.messages.append({'role': 'user', 'content': user_input})
-                full_response = ""
-                
-
-                with Live(console=self.console, refresh_per_second=10) as live:
-                    for chunk in ollama.chat(model=self.model, messages=self.messages, stream=True):
-                        content = chunk['message']['content']
-                        full_response += content
-                        live.update(self.last_lines_preview(full_response), refresh=True)
-                    display_group = Group(
-                            Text(RESPONSE_MARKER, style="bright_white on bright_blue"),
-                            CustomMarkdown(self.process_latex(full_response),
-                                           justify="left", code_theme="monokai"))
-                    live.update(display_group)
-
-                self.messages.append({'role': 'assistant', 'content': full_response})
-                print() 
-                subprocess.run(["sh", "./scroll.sh", RESPONSE_MARKER], check=True)
-
+                self.process_user_query(user_input)
         except KeyboardInterrupt:
             return
         except Exception:
@@ -205,7 +245,7 @@ class AIChat:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-            description=f"xllmterm {__version__} - an interactive ollama shell")
+            description=f"xllmshell {__version__} - an interactive ollama shell")
 
     parser.add_argument(
         "-m","--model", type=str, 
