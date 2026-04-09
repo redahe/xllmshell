@@ -73,6 +73,23 @@ class AIChat:
             return subprocess.check_output(
                 ["txc", "-f", temp.name, "-c"], text=True)
 
+    def scroll_in_tmux(self, marker):
+        # Find the last marker occurrence in copy mode
+        subprocess.run(
+            ["tmux", "copy-mode", ";", "send-keys", "-X", "search-backward", marker])
+        # If the response took more than one screen - scroll it to the top
+        subprocess.run(["tmux", "run-shell",
+                        ' line_n=$(tmux display-message -p "#{copy_cursor_y}")\n'
+                        ' tmux send-keys -X bottom-line\n'
+                        ' tmux send-keys -N "$line_n" -X cursor-down\n'
+                        ' tmux send-keys -X top-line\n'])
+        # Fix the cursor position if the response took less than one screen
+        subprocess.run(["tmux", "send-keys", "-X", "bottom-line", ";",
+                        "send-keys", "-X", "search-backward", marker])
+        # Step one line down and clear search selection
+        subprocess.run(["tmux", "send-keys", "-X", "cursor-down", ";",
+                        "send-keys", "-X", "clear-selection"])
+
     def last_lines_preview(self, content):
         spinner_frame = PREVIEW_SPINNER.render(time.time())
         result = Text("", style="default")
@@ -176,8 +193,7 @@ class AIChat:
         self.messages.append({'role': 'assistant', 'content': full_response})
         self.console.print()
         if (self.tmux_scroll):
-            subprocess.run(
-                ["sh", "./scroll.sh", RESPONSE_MARKER], check=True)
+            self.scroll_in_tmux(RESPONSE_MARKER)
 
     def save_conversation(self, filename):
         with open(filename, 'w', encoding='utf-8') as file:
