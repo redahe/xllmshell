@@ -3,15 +3,14 @@
 import argparse
 import ollama
 import os
+import json
 import subprocess
-import sys
 import tempfile
 import time
 
 from rich.console import Console, Group
 from rich.markdown import Markdown, CodeBlock
 from rich.live import Live
-from rich.table import Table
 from rich.text import Text
 from rich.spinner import Spinner
 from rich.panel import Panel
@@ -20,17 +19,18 @@ from rich.syntax import Syntax
 
 __version__ = "0.0.1"
 
-#########  CONFIGURATION
-PREVIEW_STYLE="bright_white on red"
+# ########  CONFIGURATION
+PREVIEW_STYLE = "bright_white on red"
 PREVIEW_TEXT = Text(' Previewing unformatted response ',
                     style=PREVIEW_STYLE)
 PREVIEW_SPINNER = Spinner("line", text="", style=PREVIEW_STYLE)
 RESPONSE_MARKER = 'AI RESPONSE:'
-REQUEST_MARKER_STYLED_TEXT = Text(' USER REQUEST:', 
-                                  style = "bright_white on yellow")
+REQUEST_MARKER_STYLED_TEXT = Text(' USER REQUEST:',
+                                  style="bright_white on yellow")
 
 PROMPT = "\x01\033[1;36m\x02>>>>\x01\033[0m\x02"
-###########
+# ##########
+
 
 class ZeroPaddingCodeBlock(CodeBlock):
     def __rich_console__(self, console, options):
@@ -44,6 +44,7 @@ class ZeroPaddingCodeBlock(CodeBlock):
         )
         yield syntax
 
+
 class CustomMarkdown(Markdown):
     elements = {
         **Markdown.elements,
@@ -51,26 +52,26 @@ class CustomMarkdown(Markdown):
         "code_block": ZeroPaddingCodeBlock
     }
 
+
 class AIChat:
 
     def __init__(self, model, format_response, convert_latex, tmux_scroll):
         self.model = model
-        self.format_response=format_response
-        self.convert_latex=convert_latex
-        self.tmux_scroll=tmux_scroll
+        self.format_response = format_response
+        self.convert_latex = convert_latex
+        self.tmux_scroll = tmux_scroll
         self.console = Console(highlight=False)
         self.messages = []
 
-
     def process_latex(self, markdown):
         if ('```bash' in markdown or '```sh' in markdown or '```shell' in markdown):
-            # txc often confuses shell script commands with Latex, skip latex 
+            # txc often confuses shell script commands with Latex, skip latex
             return markdown
         with tempfile.NamedTemporaryFile(mode='w', delete=True) as temp:
             temp.write(markdown)
             temp.flush()
             return subprocess.check_output(
-                    ["txc", "-f", temp.name, "-c"], text=True)
+                ["txc", "-f", temp.name, "-c"], text=True)
 
     def last_lines_preview(self, content):
         spinner_frame = PREVIEW_SPINNER.render(time.time())
@@ -82,9 +83,9 @@ class AIChat:
         result.append(Text(" ", style=PREVIEW_STYLE))
         text_obj = Text.from_markup(content)
         wrapped_lines = list(text_obj.wrap(self.console, width=self.console.width))
-        last_lines = wrapped_lines[-self.console.height+2:]
+        last_lines = wrapped_lines[-self.console.height + 2:]
         result.append(Text("\n", style="default"))
-        result.append( Text("\n").join(last_lines))
+        result.append(Text("\n").join(last_lines))
         return result
 
     def get_input_from_editor(self):
@@ -93,17 +94,15 @@ class AIChat:
             subprocess.call([editor, temp.name])
             return temp.read()
 
-
     def print_status_line(self):
         def status_value(status):
             return "[bold green]On[/bold green]" if status else\
-                    "[bold red]Off[/bold red]"
+                   "[bold red]Off[/bold red]"
 
         self.console.print(f"Model: [bold cyan]{self.model}[/bold cyan] |"
                            f" Latex: {status_value(self.convert_latex)} |"
                            f" Tmux-scroll: {status_value(self.tmux_scroll)} |"
                            f" Format responses: {status_value(self.format_response)}")
-
 
     def print_info(self):
         self.print_status_line()
@@ -111,7 +110,7 @@ class AIChat:
             "Enter a request or type [bright_magenta]/help[/bright_magenta] for commands\n")
 
     def print_help(self):
-        cl="bright_magenta"
+        cl = "bright_magenta"
         self.console.print("\n[bold]Available Commands:[/bold]")
         self.console.print(
             f"  [{cl}]/settings[/{cl}]        - Show current settings")
@@ -130,22 +129,39 @@ class AIChat:
         self.console.print(
             f"  [{cl}]/repeat[/{cl}]          - Repeat the response with no formatting")
         self.console.print(
+            f"  [{cl}]/save <filename>[/{cl}] - Save conversation to a file")
+        self.console.print(
+            f"  [{cl}]/load <filename>[/{cl}] - Clear the current conversation and load history from a file ")
+        self.console.print(
             f"  [{cl}]/exit[/{cl}]            - Exit the chat")
         self.console.print(
             f"  [{cl}]/help[/{cl}]            - Show this menu\n")
- 
 
     def parse_on_off(self, value):
         return value.lower() in ["on", "true", "1", "yes", "y"]
 
-
-    def process_user_query(self, user_input):
+    def print_user_input(self, user_input):
         self.console.print(REQUEST_MARKER_STYLED_TEXT, justify="right")
         content = Text(user_input, style="default")
         bubble = Panel(content, style="white", expand=False, padding=(0, 1))
         self.console.print(Align.right(bubble))
         self.console.print("")
 
+    def format_ai_response(self, ai_response):
+        response_to_show = ai_response
+        if (self.convert_latex):
+            response_to_show = self.process_latex(response_to_show)
+        if (self.format_response):
+            response_to_show = CustomMarkdown(response_to_show)
+        else:
+            response_to_show = Text(response_to_show)
+        response_to_show = Group(
+            Text(RESPONSE_MARKER, style="bright_white on bright_blue"),
+            response_to_show)
+        return response_to_show
+
+    def process_user_query(self, user_input):
+        self.print_user_input(user_input)
         self.messages.append({'role': 'user', 'content': user_input})
         full_response = ""
         with Live(console=self.console, refresh_per_second=10) as live:
@@ -155,26 +171,45 @@ class AIChat:
                 full_response += content
                 live.update(self.last_lines_preview(full_response), refresh=True)
 
-            response_to_show = full_response
-            if (self.convert_latex):
-                response_to_show = self.process_latex(response_to_show)
-
-            if (self.format_response):
-                response_to_show = CustomMarkdown(response_to_show)
-            else:
-                response_to_show = Text(response_to_show)
-
-            display_group = Group(
-                    Text(RESPONSE_MARKER, style="bright_white on bright_blue"),
-                    response_to_show)
-            live.update(display_group)
+            response_to_show = self.format_ai_response(full_response)
+            live.update(response_to_show)
         self.messages.append({'role': 'assistant', 'content': full_response})
-        print() 
+        self.console.print()
         if (self.tmux_scroll):
             subprocess.run(
-                    ["sh", "./scroll.sh", RESPONSE_MARKER], check=True)
+                ["sh", "./scroll.sh", RESPONSE_MARKER], check=True)
 
+    def save_conversation(self, filename):
+        with open(filename, 'w', encoding='utf-8') as file:
+            json.dump(self.messages, file, indent=4)
+        self.console.print(
+            "[bold green]The conversation has been saved to:[/bold green]"
+            f" [bold cyan]{filename}[/bold cyan]")
 
+    def load_conversation(self, filename):
+        messages = []
+        with open(filename, 'r', encoding='utf-8') as file:
+            messages = json.load(file)
+
+        if not isinstance(messages, list):
+            raise Exception("File format is not recognized")
+        for message in messages:
+            if not isinstance(message, dict) or\
+                    'role' not in message or\
+                    message['role'] not in ['user', 'assistant'] or\
+                    'content' not in message or \
+                    not isinstance(message['content'], str) or\
+                    len(message) != 2:
+                raise Exception(f"Message format is not recognized ({str(message)})")
+
+        self.messages = messages
+        for message in self.messages:
+            if message['role'] == "user":
+                self.print_user_input(message['content'])
+            elif message['role'] == "assistant":
+                ai_response = message['content']
+                self.console.print(self.format_ai_response(ai_response))
+                self.console.print()
 
     def run(self):
         self.print_info()
@@ -207,23 +242,40 @@ class AIChat:
                             self.format_response = self.parse_on_off(cmd_parts[1])
                         self.print_status_line()
                         continue
+                    elif cmd == '/save':
+                        if len(cmd_parts) > 1:
+                            self.save_conversation(cmd_parts[1])
+                        else:
+                            self.console.print(
+                                "[bold red]Filename is missing[/bold red]")
+                        continue
+                    elif cmd == '/load':
+                        if len(cmd_parts) > 1:
+                            self.load_conversation(cmd_parts[1])
+                        else:
+                            self.console.print(
+                                "[bold red]Filename is missing[/bold red]")
+                        continue
                     elif cmd == '/clear':
                         self.messages = []
                         self.console.clear()
-                        self.console.print("[bold green]Conversation cleared.[/bold green]")
+                        self.console.print(
+                            "[bold green]Conversation cleared.[/bold green]")
                         continue
                     elif cmd == '/repeat':
                         for message in reversed(self.messages):
-                            if message['role']=='assistant': 
+                            if message['role'] == 'assistant':
                                 self.console.print(message['content'])
                                 break
                         continue
                     elif cmd == '/model':
                         if len(cmd_parts) > 1:
                             self.model = cmd_parts[1]
-                            self.console.print(f"Switched to model: [bold cyan]{self.model}[/bold cyan]")
+                            self.console.print(
+                                f"Switched to model: [bold cyan]{self.model}[/bold cyan]")
                         else:
-                            self.console.print(f"Current model: [bold cyan]{self.model}[/bold cyan]")
+                            self.console.print(
+                                f"Current model: [bold cyan]{self.model}[/bold cyan]")
                         continue
                     elif cmd == '/settings':
                         self.print_status_line()
@@ -231,9 +283,9 @@ class AIChat:
                     elif cmd == '/help':
                         self.print_help()
                         continue
-                    
                     else:
-                        self.console.print(f"[bold red]Unknown command:[/bold red] {cmd}")
+                        self.console.print(
+                            f"[bold red]Unknown command:[/bold red] {cmd}")
                         continue
                 self.process_user_query(user_input)
         except KeyboardInterrupt:
@@ -245,15 +297,15 @@ class AIChat:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-            description=f"xllmshell {__version__} - an interactive ollama shell")
+        description=f"xllmshell {__version__} - an interactive ollama shell")
 
     parser.add_argument(
-        "-m","--model", type=str, 
-        default="qwen2.5-coder:7b", 
+        "-m", "--model", type=str,
+        default="qwen2.5-coder:7b",
         help="Model to use")
 
     parser.add_argument(
-        "-l","--convert_latex",
+        "-l", "--convert_latex",
         action="store_true",
         help="Enable conversion of LaTex formulas to Unicode via TeXicode")
 
@@ -269,13 +321,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def main ():
+def main():
     args = parse_args()
     aiChat = AIChat(
-            args.model,
-            not(args.no_format),
-            args.convert_latex,
-            not(args.no_tmux))
+        args.model,
+        not (args.no_format),
+        args.convert_latex,
+        not (args.no_tmux))
     aiChat.run()
 
 
