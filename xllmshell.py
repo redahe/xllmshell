@@ -187,29 +187,31 @@ class AIChat:
             f" [bold cyan]{filename}[/bold cyan]")
 
     def load_conversation(self, filename):
-        messages = []
-        with open(filename, 'r', encoding='utf-8') as file:
-            messages = json.load(file)
-
-        if not isinstance(messages, list):
-            raise Exception("File format is not recognized")
-        for message in messages:
-            if not isinstance(message, dict) or\
-                    'role' not in message or\
-                    message['role'] not in ['user', 'assistant'] or\
-                    'content' not in message or \
-                    not isinstance(message['content'], str) or\
-                    len(message) != 2:
-                raise Exception(f"Message format is not recognized ({str(message)})")
-
-        self.messages = messages
-        for message in self.messages:
-            if message['role'] == "user":
-                self.print_user_input(message['content'])
-            elif message['role'] == "assistant":
-                ai_response = message['content']
-                self.console.print(self.format_ai_response(ai_response))
-                self.console.print()
+        try:
+            messages = []
+            with open(filename, 'r', encoding='utf-8') as file:
+                messages = json.load(file)
+            if not isinstance(messages, list):
+                raise Exception("File format is not recognized")
+            for message in messages:
+                if not isinstance(message, dict) or\
+                        'role' not in message or\
+                        message['role'] not in ['user', 'assistant'] or\
+                        'content' not in message or \
+                        not isinstance(message['content'], str) or\
+                        len(message) != 2:
+                    raise Exception(
+                        f"Message format is not recognized ({str(message)})")
+            self.messages = messages
+            for message in self.messages:
+                if message['role'] == "user":
+                    self.print_user_input(message['content'])
+                elif message['role'] == "assistant":
+                    ai_response = message['content']
+                    self.console.print(self.format_ai_response(ai_response))
+                    self.console.print()
+        except Exception as e:
+            self.console.print(f'[bold red]Error: {str(e)} [/bold red]')
 
     def run(self):
         self.print_info()
