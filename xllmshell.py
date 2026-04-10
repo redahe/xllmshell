@@ -5,6 +5,7 @@ import ollama
 import os
 import json
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -33,6 +34,9 @@ PROMPT = "\x01\033[1;36m\x02>>>>\x01\033[0m\x02"
 
 
 class ZeroPaddingCodeBlock(CodeBlock):
+    """
+    Remove the default padding for the code blocks to facilitate copying
+    """
     def __rich_console__(self, console, options):
         code_str = self.text.plain
         syntax = Syntax(
@@ -177,10 +181,18 @@ class AIChat:
             response_to_show)
         return response_to_show
 
-    def process_user_query(self, user_input):
-        self.print_user_input(user_input)
+    def process_user_query(self, user_input, script_mode=False):
         self.messages.append({'role': 'user', 'content': user_input})
         full_response = ""
+
+        if script_mode:
+            ollama_resp = ollama.chat(model=self.model, messages=self.messages)
+            full_response = ollama_resp['message']['content']
+            self.console.print(full_response)
+            self.messages.append({'role': 'assistant', 'content': full_response})
+            return
+
+        self.print_user_input(user_input)
         with Live(console=self.console, refresh_per_second=10) as live:
             for chunk in ollama.chat(
                     model=self.model, messages=self.messages, stream=True):
@@ -202,7 +214,7 @@ class AIChat:
             "[bold green]The conversation has been saved to:[/bold green]"
             f" [bold cyan]{filename}[/bold cyan]")
 
-    def load_conversation(self, filename):
+    def load_conversation(self, filename, script_mode=False):
         try:
             messages = []
             with open(filename, 'r', encoding='utf-8') as file:
@@ -219,6 +231,10 @@ class AIChat:
                     raise Exception(
                         f"Message format is not recognized ({str(message)})")
             self.messages = messages
+
+            if script_mode:
+                return
+
             for message in self.messages:
                 if message['role'] == "user":
                     self.print_user_input(message['content'])
@@ -328,6 +344,11 @@ def parse_args():
         help="Load conversation history from a file")
 
     parser.add_argument(
+        "-a", "--ask", type=str,
+        metavar='QUERY_OR_DASH',
+        help="Ask only one question. Read question from the standard input if single dash is passed")
+
+    parser.add_argument(
         "--no-latex",
         action="store_true",
         help="Disable conversion of LaTex formulas to Unicode via TeXicode")
@@ -341,7 +362,20 @@ def parse_args():
         "--no-tmux",
         action="store_true",
         help="Disable autoscrolling to the begining of the AI response in tmux copy-mode")
-    return parser.parse_args()
+
+    parser.add_argument(
+        "-d", "--script-mode",
+        action="store_true",
+        help="Scripting mode: output bare AI response, no UI feautures, do not print the history. Must be used with --ask")
+
+    args = parser.parse_args()
+    if (args.script_mode):
+        if not args.ask:
+            parser.error("Script mode must be used with --ask")
+        args.no_format = True
+        args.no_latex = True
+        args.no_tmux = True
+    return args
 
 
 def main():
@@ -352,8 +386,15 @@ def main():
         not (args.no_latex),
         not (args.no_tmux))
     if args.load:
-        aiChat.load_conversation(args.load)
-    aiChat.run()
+        aiChat.load_conversation(args.load, args.script_mode)
+    if args.ask:
+        if args.ask == '-':
+            query = sys.stdin.read()
+        else:
+            query = args.ask
+        aiChat.process_user_query(query, args.script_mode)
+    elif not args.script_mode:
+        aiChat.run()
 
 
 if __name__ == "__main__":
