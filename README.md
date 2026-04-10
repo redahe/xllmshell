@@ -6,10 +6,10 @@ chatting with LLM in a terminal more pleasant
 
 ## Supported features
 
- - Multi-line input by using your text editor (from $EDITOR env var)
- - Formatting LLM response (Markdown with syntax highlighting)
- - Converting LaTex formulas in LLM response to Unicode, using TeXicode
+ - Formatting LLM response (as Markdown with syntax highlighting), using [Rich](https://github.com/textualize/rich)
+ - Converting LaTex formulas in LLM response to Unicode, using [TeXicode](https://github.com/dxddxx/TeXicode)
  - Automatic scrolling in tmux copy-mode to the beginning of the LLM response
+ - Multi-line input by using your text editor (from $EDITOR environment var)
  - Saving/loading conversations
  - Running in a non-interactive mode for scripting
 
