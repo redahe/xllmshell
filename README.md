@@ -6,10 +6,10 @@ chatting with LLM in a terminal more pleasant
 
 ## Supported features
 
- - Formatting LLM response (as a markdown with syntax highlighting), using [Rich](https://github.com/textualize/rich)
- - Converting LaTex formulas in LLM response to Unicode, using [TeXicode](https://github.com/dxddxx/TeXicode)
+ - Formatting LLM response as a markdown with syntax highlighting (via [Rich](https://github.com/textualize/rich))
+ - Converting LaTex formulas in LLM response to Unicode (via [TeXicode](https://github.com/dxddxx/TeXicode))
+ - User input with hotkeys (vi/emacs), history and tab completion for commands (via [python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit))
  - Automatic scrolling in tmux copy-mode to the beginning of the LLM response
- - User input with hotkeys (vi/emacs), history and tab completion for commands by [python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit)
  - Multi-line input by using your text editor (from the `$EDITOR` environment var)
  - Saving/loading conversations
  - Running in a non-interactive mode for scripting
