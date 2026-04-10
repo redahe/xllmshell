@@ -13,6 +13,9 @@ chatting with LLM in a terminal more pleasant
  - Saving/loading conversations
  - Running in a non-interactive mode for scripting
 
+## Demo
+
+<img src="https://github.com/user-attachments/assets/953fa7ec-5eca-400e-8896-935a1802234f" width="500">
 
 ## Installation
 
