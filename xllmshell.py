@@ -60,12 +60,38 @@ class CustomMarkdown(Markdown):
 class AIChat:
 
     def __init__(self, model, format_response, convert_latex, tmux_scroll):
+        self.console = Console(highlight=False)
         self.model = model
         self.format_response = format_response
-        self.convert_latex = convert_latex
-        self.tmux_scroll = tmux_scroll
-        self.console = Console(highlight=False)
+        self.set_convert_latex(convert_latex, False)
+        self.set_tmux_scroll(tmux_scroll, False)
         self.messages = []
+
+    def set_tmux_scroll(self, value, print_error=True):
+        if value:
+            if not os.environ.get("TMUX", None):
+                if print_error:
+                    self.console.print(
+                        "[bold red]Not running in tmux ($TMUX is not set) [/bold red]")
+                self.tmux_scroll = False
+                return
+        self.tmux_scroll = value
+
+    def set_convert_latex(self, value, print_error=True):
+        if value:
+            try:
+                return_code = subprocess.call(
+                    ['txc', '-h'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except FileNotFoundError:
+                return_code = -1
+            if return_code != 0:
+                if print_error:
+                    self.console.print(
+                        "[bold red]TeXicode not found ('txc -h' failed) [/bold red]")
+                self.convert_latex = False
+                return
+        self.convert_latex = value
 
     def process_latex(self, markdown):
         if ('```bash' in markdown or '```sh' in markdown or '```shell' in markdown):
@@ -263,12 +289,12 @@ class AIChat:
                             user_input = self.get_input_from_editor()
                     elif cmd == '/latex':
                         if len(cmd_parts) > 1:
-                            self.convert_latex = self.parse_on_off(cmd_parts[1])
+                            self.set_convert_latex(self.parse_on_off(cmd_parts[1]))
                         self.print_status_line()
                         continue
                     elif cmd == '/scroll':
                         if len(cmd_parts) > 1:
-                            self.tmux_scroll = self.parse_on_off(cmd_parts[1])
+                            self.set_tmux_scroll(self.parse_on_off(cmd_parts[1]))
                         self.print_status_line()
                         continue
                     elif cmd == '/format':
