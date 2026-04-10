@@ -134,7 +134,7 @@ class AIChat:
         self.console.print(
             f"  [{cl}]/model <name>[/{cl}]    - Change or show the current model")
         self.console.print(
-            f"  [{cl}]/latex <on/off>[/{cl}]  - Enable/Disable converting LaTex formulas to unicode")
+            f"  [{cl}]/latex <on/off>[/{cl}]  - Enable/Disable converting LaTex formulas to Unicode")
         self.console.print(
             f"  [{cl}]/scroll <on/off>[/{cl}] - Enable/Disable autoscrolling to the beginning of the AI response in tmux copy-mode")
         self.console.print(
@@ -323,17 +323,22 @@ def parse_args():
         help="Model to use")
 
     parser.add_argument(
-        "-l", "--convert_latex",
-        action="store_true",
-        help="Enable conversion of LaTex formulas to Unicode via TeXicode")
+        "-l", "--load", type=str,
+        metavar='FILE_PATH',
+        help="Load conversation history from a file")
 
     parser.add_argument(
-        "--no_format",
+        "--no-latex",
+        action="store_true",
+        help="Disable conversion of LaTex formulas to Unicode via TeXicode")
+
+    parser.add_argument(
+        "--no-format",
         action="store_true",
         help="Disable formatting (syntax highlighting) in reposnses")
 
     parser.add_argument(
-        "--no_tmux",
+        "--no-tmux",
         action="store_true",
         help="Disable autoscrolling to the begining of the AI response in tmux copy-mode")
     return parser.parse_args()
@@ -344,8 +349,10 @@ def main():
     aiChat = AIChat(
         args.model,
         not (args.no_format),
-        args.convert_latex,
+        not (args.no_latex),
         not (args.no_tmux))
+    if args.load:
+        aiChat.load_conversation(args.load)
     aiChat.run()
 
 
