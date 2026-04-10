@@ -9,6 +9,7 @@ chatting with LLM in a terminal more pleasant
  - Formatting LLM response (as a markdown with syntax highlighting), using [Rich](https://github.com/textualize/rich)
  - Converting LaTex formulas in LLM response to Unicode, using [TeXicode](https://github.com/dxddxx/TeXicode)
  - Automatic scrolling in tmux copy-mode to the beginning of the LLM response
+ - User input with hotkeys (vi/emacs), history and tab completion for commands by [python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit)
  - Multi-line input by using your text editor (from the `$EDITOR` environment var)
  - Saving/loading conversations
  - Running in a non-interactive mode for scripting
@@ -38,7 +39,9 @@ pip install -r requirements.txt
 To run the script from the virtual environment:
 ```bash
 #!/bin/bash                                                                                                                             
+export XLLMSHELL_KEYS=emacs
 source .venv/bin/activate && ./xllmshell.py "$@"
 ```
-You can replace the local paths to the global ones and save it as a launch script
-available in your `$PATH`
+You can replace the local paths to the global ones and save it as a launch
+script available in your `$PATH`. Optionally specifying preferred keybindings 
+(vi/emacs) via `XLLMSHELL_KEYS` environment variable or by passing `--keys`.

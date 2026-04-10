@@ -39,6 +39,13 @@ from rich.panel import Panel
 from rich.align import Align
 from rich.syntax import Syntax
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
+from prompt_toolkit.document import Document
+from prompt_toolkit.completion import Completer, PathCompleter, WordCompleter
+
+from prompt_toolkit.enums import EditingMode
+
 __version__ = "0.0.1"
 
 # ########  CONFIGURATION
@@ -50,9 +57,12 @@ RESPONSE_MARKER = 'AI RESPONSE:'
 REQUEST_MARKER_STYLED_TEXT = Text(' USER REQUEST:',
                                   style="bright_white on yellow")
 
-PROMPT = "\x01\033[1;36m\x02>>>>\x01\033[0m\x02"
+PROMPT = ">>>>"
+PROMPT_STYLE = Style.from_dict({'prompt': 'ansicyan'})
+
 
 DEFAULT_HOST = "http://localhost:11434"
+KEYS_ENV_VAR = "XLLMSHELL_KEYS"
 # ##########
 
 
@@ -80,11 +90,50 @@ class CustomMarkdown(Markdown):
     }
 
 
+class CommandCompleter(Completer):
+    def __init__(self):
+        self.commands = ['/settings', '/model', '/latex', '/scroll', '/format',
+                         '/clear', '/edit', '/repeat', '/save ', '/load ', '/exit',
+                         '/help']
+        self.path_completer = PathCompleter(expanduser=True)
+        self.word_completer = WordCompleter(self.commands, WORD=True, ignore_case=True)
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor.lstrip()
+        if text.startswith('/save ') or text.startswith('/load '):
+            last_space_index = text.rfind(' ')
+            prefix_len = last_space_index + 1
+            sub_doc = Document(
+                text=text[prefix_len:],
+                cursor_position=document.cursor_position - prefix_len
+            )
+            yield from self.path_completer.get_completions(sub_doc, complete_event)
+        else:
+            yield from self.word_completer.get_completions(document, complete_event)
+
+
 class AIChat:
 
-    def __init__(self, model, format_response, convert_latex, tmux_scroll, host=None):
+    def __init__(self, model, format_response, convert_latex, tmux_scroll,
+                 keys, host=None):
         self.client = ollama.Client(host=(host or DEFAULT_HOST))
         self.console = Console(highlight=False)
+
+        if keys == 'vi':
+            self.editing_mode = EditingMode.VI
+            self.default_editor = 'vi'
+        elif keys == 'emacs':
+            self.editing_mode = EditingMode.EMACS
+            self.default_editor = 'emacs'
+        else:
+            raise Exception('Unsupported keybindings: ', keys)
+
+        self.prompt_session = PromptSession(
+            completer=CommandCompleter(),
+            complete_while_typing=False,
+            editing_mode=self.editing_mode
+        )
+
         self.model = model
         self.format_response = format_response
         self.set_convert_latex(convert_latex, False)
@@ -161,7 +210,7 @@ class AIChat:
 
     def get_input_from_editor(self):
         with tempfile.NamedTemporaryFile(mode='r', delete=True) as temp:
-            editor = os.environ.get('EDITOR', 'vi')
+            editor = os.environ.get('EDITOR', self.default_editor)
             subprocess.call([editor, temp.name])
             return temp.read()
 
@@ -299,11 +348,11 @@ class AIChat:
         self.print_info()
         try:
             while True:
-                user_input = input(PROMPT)
+                user_input = self.prompt_session.prompt(PROMPT, style=PROMPT_STYLE)
                 if not user_input:
                     continue
-                if user_input.startswith('/'):
-                    cmd_parts = user_input.split()
+                if user_input.lstrip().startswith('/'):
+                    cmd_parts = user_input.lstrip().split()
                     cmd = cmd_parts[0].lower()
 
                     if cmd in ['/exit', '/bye', '/quit']:
@@ -419,6 +468,14 @@ def parse_args():
         help="Scripting mode: output bare AI response, no UI feautures, do not print the history. Must be used with --ask")
 
     parser.add_argument(
+        "--keys",
+        choices=["emacs", "vi"],
+        type=str,
+        help="Prefered keybindings in the user prompt. (Also affects the default editor if `EDITOR` environment variable is not set)"
+             f" Takes precedence over the environment variable `{KEYS_ENV_VAR}`. If neither is set defaults to 'emacs'"
+    )
+
+    parser.add_argument(
         "-o", "--host", type=str,
         metavar='HOST',
         default=DEFAULT_HOST,
@@ -431,6 +488,11 @@ def parse_args():
         args.no_format = True
         args.no_latex = True
         args.no_tmux = True
+
+    if not args.keys:
+        print(f'{KEYS_ENV_VAR}', os.environ.get(KEYS_ENV_VAR))
+        args.keys = os.environ.get(KEYS_ENV_VAR, 'emacs')
+
     return args
 
 
@@ -441,6 +503,7 @@ def main():
         not (args.no_format),
         not (args.no_latex),
         not (args.no_tmux),
+        args.keys,
         args.host)
     if args.load:
         aiChat.load_conversation(args.load, args.script_mode)
