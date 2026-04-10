@@ -1,7 +1,7 @@
 # xllmshell
 
-xllmsmell is an Interactive shell for Ollama with a set of features to make
-chatting with LLM in a terminal more pleasant
+xllmsmell is an interactive shell for Ollama with a set of features to make 
+chatting with LLMs more pleasant in the keyboard-centric terminal workflow
 
 
 ## Supported features
@@ -15,10 +15,10 @@ chatting with LLM in a terminal more pleasant
  - Running in a non-interactive mode for scripting
 
 ## Demo
-Programming:  
+Programming questions:  
 <img src="https://github.com/user-attachments/assets/29812e38-1f43-4a26-bc01-2246f59ff9a6" width="500">
 
-Math:  
+Math questions:  
 <img src="https://github.com/user-attachments/assets/953fa7ec-5eca-400e-8896-935a1802234f" width="500">
 
 ## Installation
