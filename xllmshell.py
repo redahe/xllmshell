@@ -51,6 +51,8 @@ REQUEST_MARKER_STYLED_TEXT = Text(' USER REQUEST:',
                                   style="bright_white on yellow")
 
 PROMPT = "\x01\033[1;36m\x02>>>>\x01\033[0m\x02"
+
+DEFAULT_HOST = "http://localhost:11434"
 # ##########
 
 
@@ -80,7 +82,8 @@ class CustomMarkdown(Markdown):
 
 class AIChat:
 
-    def __init__(self, model, format_response, convert_latex, tmux_scroll):
+    def __init__(self, model, format_response, convert_latex, tmux_scroll, host=None):
+        self.client = ollama.Client(host=(host or DEFAULT_HOST))
         self.console = Console(highlight=False)
         self.model = model
         self.format_response = format_response
@@ -233,7 +236,7 @@ class AIChat:
         full_response = ""
 
         if script_mode:
-            ollama_resp = ollama.chat(model=self.model, messages=self.messages)
+            ollama_resp = self.client.chat(model=self.model, messages=self.messages)
             full_response = ollama_resp['message']['content']
             self.console.print(full_response)
             self.messages.append({'role': 'assistant', 'content': full_response})
@@ -241,7 +244,7 @@ class AIChat:
 
         self.print_user_input(user_input)
         with Live(console=self.console, refresh_per_second=10) as live:
-            for chunk in ollama.chat(
+            for chunk in self.client.chat(
                     model=self.model, messages=self.messages, stream=True):
                 content = chunk['message']['content']
                 full_response += content
@@ -415,6 +418,12 @@ def parse_args():
         action="store_true",
         help="Scripting mode: output bare AI response, no UI feautures, do not print the history. Must be used with --ask")
 
+    parser.add_argument(
+        "-o", "--host", type=str,
+        metavar='HOST',
+        default=DEFAULT_HOST,
+        help=f"Specify Ollama host (default: {DEFAULT_HOST})")
+
     args = parser.parse_args()
     if (args.script_mode):
         if not args.ask:
@@ -431,7 +440,8 @@ def main():
         args.model,
         not (args.no_format),
         not (args.no_latex),
-        not (args.no_tmux))
+        not (args.no_tmux),
+        args.host)
     if args.load:
         aiChat.load_conversation(args.load, args.script_mode)
     if args.ask:
