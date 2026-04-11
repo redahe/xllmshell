@@ -1,6 +1,6 @@
 # xllmshell
 
-xllmsmell is an interactive shell for Ollama with a set of features to make 
+xllmshell is an interactive shell for Ollama with a set of features to make 
 chatting with LLMs more pleasant in the keyboard-centric terminal workflow
 
 
