@@ -118,6 +118,7 @@ class AIChat:
                  keys, host=None):
         self.client = ollama.Client(host=(host or DEFAULT_HOST))
         self.console = Console(highlight=False)
+        self.tmux_pane_id = None
 
         if keys == 'vi':
             self.editing_mode = EditingMode.VI
@@ -142,10 +143,11 @@ class AIChat:
 
     def set_tmux_scroll(self, value, print_error=True):
         if value:
-            if not os.environ.get("TMUX", None):
+            self.tmux_pane_id = os.environ.get("TMUX_PANE", None)
+            if not self.tmux_pane_id:
                 if print_error:
                     self.console.print(
-                        "[bold red]Not running in tmux ($TMUX is not set) [/bold red]")
+                        "[bold red]Not running in tmux ($TMUX_PANE is not set) [/bold red]")
                 self.tmux_scroll = False
                 return
         self.tmux_scroll = value
@@ -179,19 +181,32 @@ class AIChat:
     def scroll_in_tmux(self, marker):
         # Find the last marker occurrence in copy mode
         subprocess.run(
-            ["tmux", "copy-mode", ";", "send-keys", "-X", "search-backward", marker])
+            ["tmux", "copy-mode", "-t", self.tmux_pane_id, ";",
+             "send-keys", "-t", self.tmux_pane_id, "-X", "search-backward", marker])
         # If the response took more than one screen - scroll it to the top
-        subprocess.run(["tmux", "run-shell",
-                        ' line_n=$(tmux display-message -p "#{copy_cursor_y}")\n'
-                        ' tmux send-keys -X bottom-line\n'
-                        ' tmux send-keys -N "$line_n" -X cursor-down\n'
-                        ' tmux send-keys -X top-line\n'])
+        subprocess.run(["tmux", "run-shell", "-t", self.tmux_pane_id,
+                        ' line_n=$(tmux display-message'
+                        f' -t {self.tmux_pane_id}'
+                        ' -p "#{copy_cursor_y}")\n'
+                        ' tmux send-keys'
+                        f' -t {self.tmux_pane_id}'
+                        ' -X bottom-line\n'
+                        ' tmux send-keys'
+                        f' -t {self.tmux_pane_id}'
+                        ' -N "$line_n" -X cursor-down\n'
+                        ' tmux send-keys'
+                        f' -t {self.tmux_pane_id}'
+                        ' -X top-line\n'])
         # Fix the cursor position if the response took less than one screen
-        subprocess.run(["tmux", "send-keys", "-X", "bottom-line", ";",
-                        "send-keys", "-X", "search-backward", marker])
+        subprocess.run(["tmux", "send-keys", "-t", self.tmux_pane_id,
+                        "-X", "bottom-line", ";",
+                        "send-keys", "-t", self.tmux_pane_id,
+                        "-X", "search-backward", marker])
         # Step one line down and clear search selection
-        subprocess.run(["tmux", "send-keys", "-X", "cursor-down", ";",
-                        "send-keys", "-X", "clear-selection"])
+        subprocess.run(["tmux", "send-keys", "-t", self.tmux_pane_id,
+                        "-X", "cursor-down", ";",
+                        "send-keys", "-t", self.tmux_pane_id,
+                        "-X", "clear-selection"])
 
     def last_lines_preview(self, content):
         spinner_frame = PREVIEW_SPINNER.render(time.time())
@@ -490,7 +505,6 @@ def parse_args():
         args.no_tmux = True
 
     if not args.keys:
-        print(f'{KEYS_ENV_VAR}', os.environ.get(KEYS_ENV_VAR))
         args.keys = os.environ.get(KEYS_ENV_VAR, 'emacs')
 
     return args
